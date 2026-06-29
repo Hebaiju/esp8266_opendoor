@@ -20,12 +20,16 @@ void task_door_run(void);
 void task_led_init(void);
 void task_led_run(void);
 void task_led_set_interval(uint32_t ms);
+void task_led_set_mode(uint8_t mode);
+uint8_t task_led_get_mode(void);
+void task_led_manual_toggle(void);
 
 void task_uart_init(void);
 void task_uart_run(void);
 
 void task_blinker_init(void);
 void task_blinker_run(void);
+void task_blinker_report_light(bool on);
 
 void door_send_cmd(door_cmd_t cmd);
 
