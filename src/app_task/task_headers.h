@@ -1,10 +1,32 @@
 #ifndef __TASK_HEADERS_H__
 #define __TASK_HEADERS_H__
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include <Arduino.h>
 
-void task_led_create(void);
-void task_uart_create(void);
+typedef enum {
+    DOOR_CMD_OPEN = 0,
+} door_cmd_t;
+
+typedef struct {
+    door_cmd_t cmd;
+    uint8_t    reserved;
+} door_msg_t;
+
+#define DOOR_QUEUE_SIZE  4
+
+void task_door_init(void);
+void task_door_run(void);
+
+void task_led_init(void);
+void task_led_run(void);
+void task_led_set_interval(uint32_t ms);
+
+void task_uart_init(void);
+void task_uart_run(void);
+
+void task_blinker_init(void);
+void task_blinker_run(void);
+
+void door_send_cmd(door_cmd_t cmd);
 
 #endif

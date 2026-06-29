@@ -2,41 +2,36 @@
 
 err_code_t bsp_gpio_init(uint8_t pin, gpio_mode_t mode)
 {
-    if (pin >= 16) {
-        return ERR_PARAM;
-    }
-
     switch (mode) {
         case GPIO_MODE_INPUT:
-            GPIO_DIS_OUTPUT(pin);
+            pinMode(pin, INPUT);
             break;
         case GPIO_MODE_OUTPUT:
-            GPIO_AS_OUTPUT(pin);
+            pinMode(pin, OUTPUT);
             break;
         case GPIO_MODE_INPUT_PULLUP:
-            GPIO_DIS_OUTPUT(pin);
+            pinMode(pin, INPUT_PULLUP);
+            break;
+        case GPIO_MODE_INPUT_PULLDOWN:
+            pinMode(pin, INPUT_PULLDOWN_16);
             break;
         default:
-            return ERR_PARAM;
+            return APP_ERR_PARAM;
     }
-    return ERR_OK;
+    return APP_OK;
 }
 
 void bsp_gpio_write(uint8_t pin, uint8_t level)
 {
-    GPIO_OUTPUT_SET(pin, level ? 1 : 0);
+    digitalWrite(pin, level ? HIGH : LOW);
 }
 
 uint8_t bsp_gpio_read(uint8_t pin)
 {
-    return GPIO_INPUT_GET(pin);
+    return digitalRead(pin);
 }
 
 void bsp_gpio_toggle(uint8_t pin)
 {
-    if (GPIO_INPUT_GET(pin)) {
-        GPIO_OUTPUT_SET(pin, 0);
-    } else {
-        GPIO_OUTPUT_SET(pin, 1);
-    }
+    digitalWrite(pin, !digitalRead(pin));
 }

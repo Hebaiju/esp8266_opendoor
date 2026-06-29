@@ -1,14 +1,14 @@
 #ifndef __BSP_GPIO_H__
 #define __BSP_GPIO_H__
 
-#include "c_types.h"
-#include "gpio.h"
+#include <Arduino.h>
 #include "../common/err_code.h"
 
 typedef enum {
     GPIO_MODE_INPUT = 0,
     GPIO_MODE_OUTPUT,
     GPIO_MODE_INPUT_PULLUP,
+    GPIO_MODE_INPUT_PULLDOWN,
 } gpio_mode_t;
 
 err_code_t bsp_gpio_init(uint8_t pin, gpio_mode_t mode);
