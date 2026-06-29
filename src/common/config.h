@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#define BLINKER_AUTH               "846631006679"
+#define BLINKER_AUTH               "f8db17868da1"
 
 #define BLINKER_KEY_SERVO          "key-servo"
 #define BLINKER_KEY_LIGHT          "key-light"
@@ -34,8 +34,8 @@
 
 #define SERVO_PIN                  0
 #define SERVO_MIN_ANGLE            0
-#define SERVO_MAX_ANGLE            90
-#define SERVO_HOLD_MS              2000
+#define SERVO_MAX_ANGLE            120
+#define SERVO_HOLD_MS              3000
 
 #define IR_TX_PIN                  3
 

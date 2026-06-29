@@ -163,7 +163,6 @@ uint8_t task_led_get_mode(void)
 
 void task_led_manual_toggle(void)
 {
-    // 非AUTO模式下，直接切换灯光状态
     if (s_mode == LED_MODE_OFF) {
         s_breath_level = LED_PWM_MIN;
         s_breath_dir = 1;
@@ -177,7 +176,6 @@ void task_led_manual_toggle(void)
         LOG_I("LED手动切换: 开启 -> 关闭");
         task_blinker_report_light(false);
     } else if (s_mode == LED_MODE_BLINK) {
-        // 从闪烁模式切换到呼吸灯（开启）
         s_breath_level = LED_PWM_MIN;
         s_breath_dir = 1;
         s_last_tick = millis();
@@ -185,25 +183,39 @@ void task_led_manual_toggle(void)
         LOG_I("LED手动切换: 闪烁 -> 开启 (呼吸灯)");
         task_blinker_report_light(true);
     } else if (s_mode == LED_MODE_AUTO) {
-        // AUTO模式下的原有逻辑
         if (!srv_ntp_is_synced()) {
             LOG_W("LED自动切换失败: NTP未同步");
             return;
         }
         uint8_t hour = srv_ntp_get_hour();
         s_override_hour = hour;
-        s_manual_override = true;
 
-        if (auto_is_on()) {
-            drv_led_off();
-            LOG_I("LED自动模式: 手动覆盖 -> 关闭 (当前%d点)", hour);
-            task_blinker_report_light(false);
+        if (s_manual_override) {
+            s_manual_override = false;
+            if (auto_is_on()) {
+                s_breath_level = LED_PWM_MIN;
+                s_breath_dir = 1;
+                s_last_tick = millis();
+                LOG_I("LED自动模式: 取消覆盖，恢复自动开启 (当前%d点)", hour);
+                task_blinker_report_light(true);
+            } else {
+                drv_led_off();
+                LOG_I("LED自动模式: 取消覆盖，恢复自动关闭 (当前%d点)", hour);
+                task_blinker_report_light(false);
+            }
         } else {
-            s_breath_level = LED_PWM_MIN;
-            s_breath_dir = 1;
-            s_last_tick = millis();
-            LOG_I("LED自动模式: 手动覆盖 -> 开启 (当前%d点)", hour);
-            task_blinker_report_light(true);
+            s_manual_override = true;
+            if (auto_is_on()) {
+                drv_led_off();
+                LOG_I("LED自动模式: 手动覆盖 -> 关闭 (当前%d点)", hour);
+                task_blinker_report_light(false);
+            } else {
+                s_breath_level = LED_PWM_MIN;
+                s_breath_dir = 1;
+                s_last_tick = millis();
+                LOG_I("LED自动模式: 手动覆盖 -> 开启 (当前%d点)", hour);
+                task_blinker_report_light(true);
+            }
         }
     }
 }
