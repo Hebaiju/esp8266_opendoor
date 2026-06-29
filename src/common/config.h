@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#define BLINKER_AUTH               "f8db17868da1"
+#define BLINKER_AUTH               "846631006679"
 
 #define BLINKER_KEY_SERVO          "key-servo"
 #define BLINKER_KEY_LIGHT          "key-light"
