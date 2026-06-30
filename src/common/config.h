@@ -22,6 +22,26 @@
 #define AP_SSID_PREFIX             "ESP_8266"
 #define AP_PASSWORD                ""              /* 空密码 = 开放热点 */
 
+/* MQTT默认配置 */
+#define MQTT_DEFAULT_HOST           "broker.emqx.io"
+#define MQTT_DEFAULT_PORT           "1883"
+#define MQTT_DEFAULT_TOPIC          "esp8266/opendoor/door"
+#define MQTT_DEFAULT_PUB_TOPIC      "esp8266/opendoor/dooo"
+#define MQTT_RETRY_INTERVAL_MS      10000
+#define MQTT_KEEPALIVE_SEC          60
+#define MQTT_PING_INTERVAL_MS        30000
+
+/* MQTT指令关键词 - 收到包含以下任一关键词的消息时执行开门 */
+#define MQTT_CMD_OPEN_1             "opendoor"
+
+/* MQTT灯光指令 - 收到包含以下关键词时反转灯光状态 */
+#define MQTT_CMD_LIGHT              "light"
+
+/* MQTT回复消息 */
+#define MQTT_REPLY_OPENED           "ok"
+#define MQTT_REPLY_LIGHT_ON         "light_on"
+#define MQTT_REPLY_LIGHT_OFF        "light_off"
+
 /* WiFi配置持久化存储区 */
 #define EEPROM_WIFI_ADDR           400
 #define EEPROM_WIFI_MAGIC          0xEE
@@ -32,6 +52,16 @@
 #define EEPROM_BLINKER_ADDR        600
 #define EEPROM_BLINKER_MAGIC       0xBB
 #define EEPROM_BLINKER_AUTH_MAX    32
+
+/* MQTT配置持久化存储区 */
+#define EEPROM_MQTT_ADDR           700
+#define EEPROM_MQTT_MAGIC          0xEF
+#define EEPROM_MQTT_HOST_MAX       64
+#define EEPROM_MQTT_PORT_MAX       6
+#define EEPROM_MQTT_USER_MAX       32
+#define EEPROM_MQTT_PASS_MAX       32
+#define EEPROM_MQTT_TOPIC_MAX      64
+#define EEPROM_MQTT_CLIENT_MAX     32
 
 #define ONBOARD_LED_PIN            2
 #define LED_ACTIVE_LEVEL           0

@@ -6,6 +6,7 @@
 #include "srv_ir_ac.h"
 #include "srv_ntp.h"
 #include "srv_blinker.h"
+#include "srv_mqtt.h"
 #include "../app_task/task_headers.h"
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
@@ -199,6 +200,7 @@ border:1px solid #1a3a1a;border-radius:2px}
     <div class="card-bd">
       <div class="st-row" id="statusRow">
         <span class="st-tag" id="wifiTag" onclick="openWifiModal()"><span class="led"></span><span id="wifiTxt">WiFi</span></span>
+        <span class="st-tag" id="mqttTag" onclick="openMqttModal()"><span class="led"></span><span id="mqttTxt">MQTT</span></span>
         <span class="st-tag" id="blinkerTag" onclick="openBlinkerModal()"><span class="led"></span><span id="blinkTxt">点灯</span></span>
         <span class="st-tag" id="ntpTag"><span class="led"></span><span id="ntpTxt">NTP</span></span>
       </div>
@@ -312,6 +314,49 @@ border:1px solid #1a3a1a;border-radius:2px}
   </div>
 </div>
 
+<!-- MQTT配置弹窗 -->
+<div class="modal-mask" id="mqttModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="t">MQTT 配置</span>
+      <button class="modal-close" onclick="closeMqttModal()">&times;</button>
+    </div>
+    <div class="modal-bd">
+      <div class="cur-info" id="mqttCurInfo">
+        <div class="cur-label">当前服务器</div>
+        <div class="cur-val" id="mqttCurHost">--</div>
+      </div>
+      <div class="step-hint">配置公共MQTT服务器，订阅主题接收开门指令</div>
+      <div class="inp-grp">
+        <label>服务器地址</label>
+        <input type="text" id="mqttHost" placeholder="broker.emqx.io" maxlength="64">
+      </div>
+      <div class="inp-grp">
+        <label>端口</label>
+        <input type="text" id="mqttPort" placeholder="1883" maxlength="6">
+      </div>
+      <div class="inp-grp">
+        <label>用户名（可选）</label>
+        <input type="text" id="mqttUser" placeholder="留空表示无认证" maxlength="32">
+      </div>
+      <div class="inp-grp">
+        <label>密码（可选）</label>
+        <input type="password" id="mqttPass" placeholder="留空表示无密码" maxlength="32">
+      </div>
+      <div class="inp-grp">
+        <label>订阅主题</label>
+        <input type="text" id="mqttTopic" placeholder="esp8266/opendoor/door" maxlength="64">
+      </div>
+      <div class="inp-grp">
+        <label>客户端ID</label>
+        <input type="text" id="mqttClient" placeholder="留空自动生成" maxlength="32">
+      </div>
+      <button class="btn btn-pri" id="saveMqttBtn" onclick="saveMqtt()">保存并连接</button>
+      <button class="btn btn-dng" onclick="clearMqttConfig()">清除MQTT配置</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var _poll=null,_hb=0,_needWifiModal=false,_needBlinkerModal=false,_status=null;
 
@@ -322,6 +367,12 @@ function poll(){
     var wt=document.getElementById('wifiTag');
     if(d.wifi){wt.className='st-tag ok';document.getElementById('wifiTxt').textContent='WiFi已连'}
     else{wt.className='st-tag err';document.getElementById('wifiTxt').textContent='WiFi断开'}
+
+    /* MQTT状态标签 */
+    var mt=document.getElementById('mqttTag');
+    if(!d.hasMqttConfig){mt.className='st-tag';document.getElementById('mqttTxt').textContent='MQTT'}
+    else if(d.mqtt){mt.className='st-tag ok';document.getElementById('mqttTxt').textContent='MQTT已连'}
+    else{mt.className='st-tag warn';document.getElementById('mqttTxt').textContent='MQTT连接中'}
 
     /* Blinker状态标签 */
     var bt=document.getElementById('blinkerTag');
@@ -483,6 +534,52 @@ function clearBlinkerConfig(){
   }).catch(function(){location.reload()})
 }
 
+/* ===== MQTT弹窗 ===== */
+function openMqttModal(){
+  document.getElementById('mqttModal').className='modal-mask show';
+  var hostEl=document.getElementById('mqttCurHost');
+  if(_status && _status.mqttHost){
+    hostEl.textContent=_status.mqttHost+':'+(_status.mqttPort||'1883');
+    document.getElementById('mqttHost').value=_status.mqttHost||'';
+    document.getElementById('mqttPort').value=_status.mqttPort||'';
+    document.getElementById('mqttTopic').value=_status.mqttTopic||'';
+    document.getElementById('mqttClient').value=_status.mqttClient||'';
+  } else {
+    /* 显示默认配置 */
+    hostEl.textContent='broker.emqx.io:1883 (默认)';
+    document.getElementById('mqttHost').value='broker.emqx.io';
+    document.getElementById('mqttPort').value='1883';
+    document.getElementById('mqttTopic').value='esp8266/opendoor/door';
+    document.getElementById('mqttClient').value='';
+  }
+}
+function closeMqttModal(){
+  document.getElementById('mqttModal').className='modal-mask';
+}
+function saveMqtt(){
+  var h=document.getElementById('mqttHost').value.trim();
+  if(!h){alert('请输入服务器地址');return}
+  var p=document.getElementById('mqttPort').value.trim()||'1883';
+  var u=document.getElementById('mqttUser').value.trim();
+  var w=document.getElementById('mqttPass').value.trim();
+  var t=document.getElementById('mqttTopic').value.trim()||'esp8266/opendoor/door';
+  var c=document.getElementById('mqttClient').value.trim();
+  var btn=document.getElementById('saveMqttBtn');
+  btn.disabled=true;btn.textContent='保存中...';
+  var url='/save_mqtt?host='+encodeURIComponent(h)+'&port='+encodeURIComponent(p)
+    +'&user='+encodeURIComponent(u)+'&pass='+encodeURIComponent(w)
+    +'&topic='+encodeURIComponent(t)+'&client='+encodeURIComponent(c);
+  fetch(url).then(function(){
+    document.body.innerHTML='<div style="text-align:center;padding:80px 20px;color:#888;font-family:Consolas,monospace;font-size:14px"><div style="color:#ff6b35;font-size:20px;margin-bottom:16px">配置已保存</div><div>设备重启中...</div></div>';
+  }).catch(function(){location.reload()})
+}
+function clearMqttConfig(){
+  if(!confirm('确定清除MQTT配置？设备将重启。'))return;
+  fetch('/clear_mqtt').then(function(){
+    document.body.innerHTML='<div style="text-align:center;padding:80px 20px;color:#888;font-family:Consolas,monospace;font-size:14px"><div style="color:#e53e3e;font-size:20px;margin-bottom:16px">配置已清除</div><div>设备重启中...</div></div>';
+  }).catch(function(){location.reload()})
+}
+
 /* ===== 空调控制 ===== */
 function toggleAcPower(){
   fetch('/action_ac_power').then(function(r){return r.text()}).then(function(){poll()}).catch(function(){})
@@ -523,6 +620,14 @@ static void handle_api_status(void)
     json += ",\"ip\":\"" + String(srv_wifi_get_ip()) + "\"";
     json += ",\"ssid\":\"" + String(srv_wifi_get_ssid()) + "\"";
     json += ",\"hasWifiConfig\":" + String(srv_wifi_has_config() ? "true" : "false");
+    /* MQTT状态 */
+    json += ",\"mqtt\":" + String(srv_mqtt_is_connected() ? "true" : "false");
+    json += ",\"mqttHost\":\"" + String(srv_mqtt_get_host()) + "\"";
+    json += ",\"mqttPort\":\"" + String(srv_mqtt_get_port()) + "\"";
+    json += ",\"mqttTopic\":\"" + String(srv_mqtt_get_topic()) + "\"";
+    json += ",\"mqttPubTopic\":\"" + String(srv_mqtt_get_pub_topic()) + "\"";
+    json += ",\"mqttClient\":\"" + String(srv_mqtt_get_client_id()) + "\"";
+    json += ",\"hasMqttConfig\":" + String(srv_mqtt_has_config() ? "true" : "false");
     /* 点灯状态 */
     json += ",\"blinker\":" + String(srv_blinker_is_ready() ? "true" : "false");
     json += ",\"blinkerAuth\":\"" + String(srv_blinker_get_auth()) + "\"";
@@ -701,6 +806,48 @@ static void handle_clear_blinker(void)
     ESP.restart();
 }
 
+static void handle_save_mqtt(void)
+{
+    s_request_count++;
+    String host = s_server.arg("host");
+    String port = s_server.arg("port");
+    String user = s_server.arg("user");
+    String pass = s_server.arg("pass");
+    String topic = s_server.arg("topic");
+    String client = s_server.arg("client");
+    LOG_I("Web请求: GET /save_mqtt (保存MQTT配置)");
+
+    if (host.length() == 0 || host.length() > EEPROM_MQTT_HOST_MAX) {
+        s_server.send(400, "text/plain", "服务器地址无效");
+        return;
+    }
+
+    srv_mqtt_save_config(
+        host.c_str(),
+        port.c_str(),
+        user.c_str(),
+        pass.c_str(),
+        topic.c_str(),
+        client.c_str()
+    );
+
+    s_server.sendHeader("Access-Control-Allow-Origin", "*");
+    s_server.send(200, "text/plain; charset=utf-8", "OK");
+    delay(300);
+    ESP.restart();
+}
+
+static void handle_clear_mqtt(void)
+{
+    s_request_count++;
+    LOG_I("Web请求: GET /clear_mqtt (清除MQTT配置)");
+    srv_mqtt_clear_config();
+    s_server.sendHeader("Access-Control-Allow-Origin", "*");
+    s_server.send(200, "text/plain; charset=utf-8", "OK");
+    delay(300);
+    ESP.restart();
+}
+
 static void handle_not_found(void)
 {
     s_request_count++;
@@ -732,6 +879,8 @@ err_code_t srv_web_init(void)
     s_server.on("/clear", HTTP_GET, handle_clear);
     s_server.on("/save_blinker", HTTP_GET, handle_save_blinker);
     s_server.on("/clear_blinker", HTTP_GET, handle_clear_blinker);
+    s_server.on("/save_mqtt", HTTP_GET, handle_save_mqtt);
+    s_server.on("/clear_mqtt", HTTP_GET, handle_clear_mqtt);
     s_server.onNotFound(handle_not_found);
 
     s_server.begin();
