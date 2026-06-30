@@ -86,9 +86,49 @@ def build_upload():
     return upload_only()
 
 
-def monitor():
-    print("\n启动串口监视器，按 Ctrl+] 退出...\n")
-    return pio_run(["device", "monitor"], "串口监控")
+def monitor(timeout=30):
+    print(f"\n启动串口监视器，{timeout}秒后自动退出...\n")
+    import threading
+    import signal
+
+    stop_event = threading.Event()
+
+    def signal_handler(sig, frame):
+        stop_event.set()
+
+    old_int_handler = signal.signal(signal.SIGINT, signal_handler)
+    try:
+        old_break_handler = signal.signal(signal.SIGBREAK, signal_handler)
+    except (AttributeError, ValueError):
+        old_break_handler = None
+
+    try:
+        proc = subprocess.Popen(
+            PIO_CMD + ["device", "monitor"],
+            cwd=PROJECT_DIR,
+            env=dict(os.environ, PLATFORMIO_FORCE_COLOR="true")
+        )
+
+        import time
+        start = time.time()
+        while proc.poll() is None and (time.time() - start) < timeout:
+            if stop_event.is_set():
+                break
+            time.sleep(0.5)
+
+        if proc.poll() is None:
+            print(f"\n\n[监视器超时 {timeout}秒，自动退出]\n")
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    finally:
+        signal.signal(signal.SIGINT, old_int_handler)
+        if old_break_handler is not None:
+            signal.signal(signal.SIGBREAK, old_break_handler)
+
+    return True
 
 
 def clean():
