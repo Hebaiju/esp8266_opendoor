@@ -5,14 +5,18 @@
 #include "../service/srv_ir_ac.h"
 #include <Blinker.h>
 
+/**
+ * @brief 点灯科技连接状态枚举
+ */
 typedef enum {
-    BLINKER_STATE_WAIT_WIFI = 0,
-    BLINKER_STATE_INIT,
-    BLINKER_STATE_CONNECTING,
-    BLINKER_STATE_READY,
-    BLINKER_STATE_FAIL,
+    BLINKER_STATE_WAIT_WIFI = 0,  /* 等待WiFi连接 */
+    BLINKER_STATE_INIT,           /* 初始化延迟中 */
+    BLINKER_STATE_CONNECTING,     /* 正在连接点灯科技服务器 */
+    BLINKER_STATE_READY,          /* 连接就绪，可通信 */
+    BLINKER_STATE_FAIL,           /* 连接失败，等待重试 */
 } blinker_state_t;
 
+/* 按钮回调函数指针 */
 static blinker_btn_cb_t s_servo_cb = NULL;
 static blinker_btn_cb_t s_light_cb = NULL;
 static blinker_btn_cb_t s_ac_pwr_cb = NULL;
@@ -23,15 +27,17 @@ static blinker_btn_cb_t s_ac_hot_cb = NULL;
 static blinker_btn_cb_t s_ac_auto_cb = NULL;
 static blinker_slider_cb_t s_temp_slider_cb = NULL;
 
+/* 连接状态机变量 */
 static blinker_state_t s_state = BLINKER_STATE_WAIT_WIFI;
 static uint32_t s_start_time = 0;
 static uint32_t s_retry_count = 0;
 static bool s_widgets_registered = false;
 
-// 应用状态（由外部设置，心跳回调同步到APP）
+/* 应用状态（由外部设置，心跳回调同步到APP） */
 static bool s_light_state = false;
 static bool s_door_opening = false;
 
+/* 控件对象指针 */
 static BlinkerButton *s_btn_servo = NULL;
 static BlinkerButton *s_btn_light = NULL;
 static BlinkerButton *s_btn_pwr = NULL;
@@ -43,30 +49,38 @@ static BlinkerButton *s_btn_auto = NULL;
 static BlinkerSlider *s_slider_temp = NULL;
 static BlinkerNumber *s_num_temp = NULL;
 
+/* 超时配置常量 */
 #define BLINKER_INIT_DELAY_MS      2000
 #define BLINKER_CONNECT_TIMEOUT_MS 30000
 #define BLINKER_RETRY_INTERVAL_MS  15000
 
-// 统一状态同步函数 - 参照旧代码 updateAppState()
+/**
+ * @brief 统一状态同步函数
+ * 将所有控件状态同步到点灯科技APP
+ */
 static void update_app_state(void)
 {
     if (!srv_blinker_is_ready()) {
         return;
     }
 
+    /* 灯光状态 */
     if (s_btn_light != NULL) {
         s_btn_light->print(s_light_state ? "on" : "off");
     }
 
+    /* 门状态通知 */
     if (s_door_opening) {
         Blinker.print("门", "开");
         Blinker.vibrate();
     }
 
+    /* 空调状态 */
     bool ac_power = srv_ir_ac_get_power();
     ac_mode_t ac_mode = srv_ir_ac_get_mode();
     int ac_temp = srv_ir_ac_get_temp();
 
+    /* 电源按钮状态 */
     if (s_btn_pwr != NULL) {
         if (ac_power) {
             s_btn_pwr->color("#00FF00");
@@ -79,6 +93,7 @@ static void update_app_state(void)
         }
     }
 
+    /* 温度显示 */
     if (s_num_temp != NULL) {
         s_num_temp->print(ac_temp);
     }
@@ -86,7 +101,11 @@ static void update_app_state(void)
         s_slider_temp->print(ac_temp);
     }
 
-    const char *c = "#CCCCCC", *d = "#CCCCCC", *h = "#CCCCCC", *a = "#CCCCCC";
+    /* 模式按钮颜色 */
+    const char *c = "#CCCCCC";
+    const char *d = "#CCCCCC";
+    const char *h = "#CCCCCC";
+    const char *a = "#CCCCCC";
     if (ac_power) {
         if (ac_mode == AC_MODE_COOL) c = "#00B0FF";
         if (ac_mode == AC_MODE_DRY)  d = "#FFC107";
@@ -98,11 +117,14 @@ static void update_app_state(void)
     if (s_btn_hot)  { s_btn_hot->color(h);  s_btn_hot->print(); }
     if (s_btn_auto) { s_btn_auto->color(a); s_btn_auto->print(); }
 
+    /* 风速按钮文字 */
     if (s_btn_fan) {
         s_btn_fan->text(srv_ir_ac_get_fan_text());
         s_btn_fan->print();
     }
 }
+
+/* ========== 按钮回调函数 ========== */
 
 static void btn_servo_callback(const String & state)
 {
@@ -197,12 +219,17 @@ static void slider_temp_callback(int32_t value)
     update_app_state();
 }
 
-// 心跳回调 - 定期同步状态到APP
+/**
+ * @brief 心跳回调 - 定期同步状态到APP
+ */
 static void heartbeat_callback(void)
 {
     update_app_state();
 }
 
+/**
+ * @brief 注册所有控件和回调
+ */
 static void register_widgets(void)
 {
     if (s_widgets_registered) {
@@ -248,13 +275,28 @@ static void register_widgets(void)
     s_num_temp = new BlinkerNumber(BLINKER_NUMBER_TEMP);
     LOG_I("点灯科技数值注册: %s", BLINKER_NUMBER_TEMP);
 
-    // 注册心跳回调 - 定期同步状态到APP
     Blinker.attachHeartbeat(heartbeat_callback);
     LOG_I("点灯科技心跳回调已注册");
 
     s_widgets_registered = true;
 }
 
+/**
+ * @brief 执行点灯科技连接
+ */
+static void blinker_do_connect(void)
+{
+    s_retry_count++;
+    LOG_I("点灯科技连接中... (第%lu次)", (unsigned long)s_retry_count);
+    Blinker.begin(BLINKER_AUTH, WIFI_SSID, WIFI_PASSWORD);
+    register_widgets();
+    s_state = BLINKER_STATE_CONNECTING;
+    s_start_time = millis();
+}
+
+/**
+ * @brief 初始化点灯科技服务
+ */
 err_code_t srv_blinker_init(blinker_btn_cb_t servo_cb,
                             blinker_btn_cb_t light_cb,
                             blinker_btn_cb_t ac_pwr_cb,
@@ -282,16 +324,9 @@ err_code_t srv_blinker_init(blinker_btn_cb_t servo_cb,
     return APP_OK;
 }
 
-static void blinker_do_connect(void)
-{
-    s_retry_count++;
-    LOG_I("点灯科技连接中... (第%lu次)", (unsigned long)s_retry_count);
-    Blinker.begin(BLINKER_AUTH, WIFI_SSID, WIFI_PASSWORD);
-    register_widgets();
-    s_state = BLINKER_STATE_CONNECTING;
-    s_start_time = millis();
-}
-
+/**
+ * @brief 运行点灯科技服务主循环
+ */
 void srv_blinker_run(void)
 {
     uint32_t now = millis();
@@ -354,20 +389,6 @@ bool srv_blinker_is_ready(void)
     return s_state == BLINKER_STATE_READY;
 }
 
-void srv_blinker_send_light_state(bool on)
-{
-    if (s_btn_light != NULL && srv_blinker_is_ready()) {
-        s_btn_light->print(on ? "on" : "off");
-    }
-}
-
-void srv_blinker_send_temp(int temp)
-{
-    if (s_num_temp != NULL && srv_blinker_is_ready()) {
-        s_num_temp->print(temp);
-    }
-}
-
 void srv_blinker_set_light_state(bool on)
 {
     s_light_state = on;
@@ -386,6 +407,8 @@ void srv_blinker_notify_action(const char *action)
         Blinker.vibrate();
     }
 }
+
+/* ========== 空调控制API实现 ========== */
 
 void srv_blinker_set_ac_power(bool on)
 {
@@ -433,16 +456,6 @@ void srv_blinker_set_ac_mode_auto(void)
     update_app_state();
 }
 
-bool srv_blinker_is_ac_cool(void) { return srv_ir_ac_get_mode() == AC_MODE_COOL; }
-bool srv_blinker_is_ac_dry(void)  { return srv_ir_ac_get_mode() == AC_MODE_DRY; }
-bool srv_blinker_is_ac_hot(void)  { return srv_ir_ac_get_mode() == AC_MODE_HEAT; }
-bool srv_blinker_is_ac_auto(void) { return srv_ir_ac_get_mode() == AC_MODE_AUTO; }
-
-void srv_blinker_update_app_state(void)
-{
-    update_app_state();
-}
-
 void srv_blinker_ac_fan_cycle(void)
 {
     srv_ir_ac_cycle_fan();
@@ -452,4 +465,9 @@ void srv_blinker_ac_fan_cycle(void)
 const char *srv_blinker_get_ac_fan_text(void)
 {
     return srv_ir_ac_get_fan_text();
+}
+
+void srv_blinker_update_app_state(void)
+{
+    update_app_state();
 }

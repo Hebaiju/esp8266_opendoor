@@ -2,16 +2,27 @@
 #include "../common/log.h"
 #include <EEPROM.h>
 
+/* 温度范围常量 */
+#define AC_TEMP_MIN                16
+#define AC_TEMP_MAX                30
+
+/* 当前空调状态 */
 static bool s_power = false;
 static ac_mode_t s_mode = AC_MODE_HEAT;
 static uint8_t s_temp = 26;
 static int s_fan_level = 4;
 
+/* 防抖发送状态 */
 static bool s_send_pending = false;
 static uint32_t s_send_timer = 0;
 
+/* 季节自动调整标记 */
 static bool s_season_manual_edit = false;
 
+/**
+ * @brief 将当前空调状态保存到EEPROM
+ * 保存内容：MagicByte、电源、模式、温度、风速
+ */
 static void ac_save_state(void)
 {
     EEPROM.begin(EEPROM_TOTAL_SIZE);
@@ -25,6 +36,11 @@ static void ac_save_state(void)
     LOG_I("空调状态已保存到EEPROM");
 }
 
+/**
+ * @brief 从EEPROM恢复空调状态
+ * 恢复内容：模式、温度、风速（电源强制关闭）
+ * @return true 成功恢复，false 无有效记录（使用默认值）
+ */
 static bool ac_load_state(void)
 {
     EEPROM.begin(EEPROM_TOTAL_SIZE);
@@ -37,15 +53,25 @@ static bool ac_load_state(void)
     s_temp = EEPROM.read(EEPROM_AC_ADDR + 3);
     s_fan_level = EEPROM.read(EEPROM_AC_ADDR + 4);
     s_power = false;
-    if (s_temp < 16 || s_temp > 30) s_temp = AC_DEFAULT_TEMP;
-    if (s_fan_level < 1 || s_fan_level > 5) s_fan_level = AC_DEFAULT_FAN_LEVEL;
-    if (s_mode > AC_MODE_FAN) s_mode = (ac_mode_t)AC_DEFAULT_MODE;
+    if (s_temp < AC_TEMP_MIN || s_temp > AC_TEMP_MAX) {
+        s_temp = AC_DEFAULT_TEMP;
+    }
+    if (s_fan_level < 1 || s_fan_level > 5) {
+        s_fan_level = AC_DEFAULT_FAN_LEVEL;
+    }
+    if (s_mode > AC_MODE_FAN) {
+        s_mode = (ac_mode_t)AC_DEFAULT_MODE;
+    }
     EEPROM.end();
     LOG_I("空调状态从EEPROM恢复: %s %d°C %s风 (电源:关)",
           srv_ir_ac_get_mode_text(), s_temp, srv_ir_ac_get_fan_text());
     return true;
 }
 
+/**
+ * @brief 立即发送红外码并保存状态
+ * 处理季节锁定逻辑
+ */
 static void send_now(void)
 {
     if (s_season_manual_edit) {
@@ -60,12 +86,19 @@ static void send_now(void)
     ac_save_state();
 }
 
+/**
+ * @brief 延迟发送红外码（防抖）
+ * 用于温度滑块拖动和模式快速切换场景
+ */
 static void send_debounced(void)
 {
     s_send_pending = true;
     s_send_timer = millis();
 }
 
+/**
+ * @brief 初始化空调服务
+ */
 err_code_t srv_ir_ac_init(void)
 {
     err_code_t ret = drv_ir_init();
@@ -84,15 +117,22 @@ err_code_t srv_ir_ac_init(void)
     return APP_OK;
 }
 
+/**
+ * @brief 运行空调服务主循环
+ */
 void srv_ir_ac_run(void)
 {
-    if (s_send_pending && (millis() - s_send_timer >= AC_SEND_DEBOUNCE_MS)) {
+    if (s_send_pending &&
+        (millis() - s_send_timer >= AC_SEND_DEBOUNCE_MS)) {
         s_send_pending = false;
         send_now();
     }
 }
 
-bool srv_ir_ac_get_power(void) { return s_power; }
+bool srv_ir_ac_get_power(void)
+{
+    return s_power;
+}
 
 void srv_ir_ac_set_power(bool on)
 {
@@ -100,7 +140,10 @@ void srv_ir_ac_set_power(bool on)
     send_now();
 }
 
-ac_mode_t srv_ir_ac_get_mode(void) { return s_mode; }
+ac_mode_t srv_ir_ac_get_mode(void)
+{
+    return s_mode;
+}
 
 void srv_ir_ac_set_mode(ac_mode_t mode)
 {
@@ -112,29 +155,43 @@ void srv_ir_ac_set_mode(ac_mode_t mode)
     send_debounced();
 }
 
-int srv_ir_ac_get_temp(void) { return (int)s_temp; }
+int srv_ir_ac_get_temp(void)
+{
+    return (int)s_temp;
+}
 
 void srv_ir_ac_set_temp(int temp)
 {
     if (!s_power) {
         return;
     }
-    if (temp < 16) temp = 16;
-    if (temp > 30) temp = 30;
+    if (temp < AC_TEMP_MIN) {
+        temp = AC_TEMP_MIN;
+    }
+    if (temp > AC_TEMP_MAX) {
+        temp = AC_TEMP_MAX;
+    }
     s_temp = (uint8_t)temp;
     s_season_manual_edit = true;
     send_debounced();
 }
 
-int srv_ir_ac_get_fan_level(void) { return s_fan_level; }
+int srv_ir_ac_get_fan_level(void)
+{
+    return s_fan_level;
+}
 
 void srv_ir_ac_set_fan_level(int level)
 {
     if (!s_power) {
         return;
     }
-    if (level < 1) level = 1;
-    if (level > 5) level = 5;
+    if (level < 1) {
+        level = 1;
+    }
+    if (level > 5) {
+        level = 5;
+    }
     s_fan_level = level;
     send_debounced();
 }
