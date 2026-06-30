@@ -99,3 +99,8 @@ void task_door_run(void)
             break;
     }
 }
+
+bool task_door_is_opening(void)
+{
+    return s_state == DOOR_STATE_OPENING || s_state == DOOR_STATE_HOLD;
+}

@@ -1,9 +1,11 @@
 #define BLINKER_WIFI
 #include "srv_blinker.h"
 #include "../common/log.h"
+#include "../common/config.h"
 #include "../service/srv_wifi.h"
 #include "../service/srv_ir_ac.h"
 #include <Blinker.h>
+#include <EEPROM.h>
 
 /**
  * @brief 点灯科技连接状态枚举
@@ -32,6 +34,10 @@ static blinker_state_t s_state = BLINKER_STATE_WAIT_WIFI;
 static uint32_t s_start_time = 0;
 static uint32_t s_retry_count = 0;
 static bool s_widgets_registered = false;
+
+/* Blinker密钥配置 */
+static char s_blinker_auth[EEPROM_BLINKER_AUTH_MAX + 1] = {0};
+static bool s_has_blinker_config = false;
 
 /* 应用状态（由外部设置，心跳回调同步到APP） */
 static bool s_light_state = false;
@@ -286,9 +292,16 @@ static void register_widgets(void)
  */
 static void blinker_do_connect(void)
 {
+    if (!s_has_blinker_config || strlen(s_blinker_auth) == 0) {
+        LOG_W("点灯科技密钥未配置，跳过连接");
+        s_state = BLINKER_STATE_FAIL;
+        s_start_time = millis();
+        return;
+    }
+
     s_retry_count++;
     LOG_I("点灯科技连接中... (第%lu次)", (unsigned long)s_retry_count);
-    Blinker.begin(BLINKER_AUTH, WIFI_SSID, WIFI_PASSWORD);
+    Blinker.begin(s_blinker_auth, srv_wifi_get_ssid(), srv_wifi_get_password());
     register_widgets();
     s_state = BLINKER_STATE_CONNECTING;
     s_start_time = millis();
@@ -316,6 +329,12 @@ err_code_t srv_blinker_init(blinker_btn_cb_t servo_cb,
     s_ac_hot_cb = ac_hot_cb;
     s_ac_auto_cb = ac_auto_cb;
     s_temp_slider_cb = temp_slider_cb;
+
+    /* 加载Blinker配置 */
+    s_has_blinker_config = srv_blinker_load_config(s_blinker_auth, sizeof(s_blinker_auth));
+    if (!s_has_blinker_config) {
+        LOG_I("Blinker配置: 未配置，使用默认值");
+    }
 
     s_state = BLINKER_STATE_WAIT_WIFI;
     s_widgets_registered = false;
@@ -470,4 +489,75 @@ const char *srv_blinker_get_ac_fan_text(void)
 void srv_blinker_update_app_state(void)
 {
     update_app_state();
+}
+
+/* ========== Blinker配置持久化 ========== */
+
+bool srv_blinker_load_config(char *auth_buf, int buf_len)
+{
+    EEPROM.begin(EEPROM_TOTAL_SIZE);
+    uint8_t magic = EEPROM.read(EEPROM_BLINKER_ADDR);
+    if (magic != EEPROM_BLINKER_MAGIC) {
+        EEPROM.end();
+        LOG_I("Blinker配置: 无有效配置");
+        return false;
+    }
+
+    int i = 0;
+    for (; i < EEPROM_BLINKER_AUTH_MAX && i < buf_len - 1; i++) {
+        char c = EEPROM.read(EEPROM_BLINKER_ADDR + 1 + i);
+        if (c == '\0') break;
+        auth_buf[i] = c;
+    }
+    auth_buf[i] = '\0';
+    EEPROM.end();
+
+    if (i == 0) {
+        LOG_I("Blinker配置: 密钥为空");
+        return false;
+    }
+
+    LOG_I("Blinker配置: 已加载 (密钥长度=%d)", i);
+    return true;
+}
+
+bool srv_blinker_save_config(const char *auth)
+{
+    if (auth == NULL) return false;
+
+    int len = strlen(auth);
+    if (len > EEPROM_BLINKER_AUTH_MAX) len = EEPROM_BLINKER_AUTH_MAX;
+
+    EEPROM.begin(EEPROM_TOTAL_SIZE);
+    EEPROM.write(EEPROM_BLINKER_ADDR, EEPROM_BLINKER_MAGIC);
+    for (int i = 0; i < len; i++) {
+        EEPROM.write(EEPROM_BLINKER_ADDR + 1 + i, auth[i]);
+    }
+    EEPROM.write(EEPROM_BLINKER_ADDR + 1 + len, '\0');
+    EEPROM.commit();
+    EEPROM.end();
+
+    LOG_I("Blinker配置: 已保存 (密钥长度=%d)", len);
+    return true;
+}
+
+bool srv_blinker_has_config(void)
+{
+    return s_has_blinker_config;
+}
+
+void srv_blinker_clear_config(void)
+{
+    EEPROM.begin(EEPROM_TOTAL_SIZE);
+    EEPROM.write(EEPROM_BLINKER_ADDR, 0x00);
+    EEPROM.commit();
+    EEPROM.end();
+    s_has_blinker_config = false;
+    memset(s_blinker_auth, 0, sizeof(s_blinker_auth));
+    LOG_I("Blinker配置: 已清除");
+}
+
+const char *srv_blinker_get_auth(void)
+{
+    return s_blinker_auth;
 }

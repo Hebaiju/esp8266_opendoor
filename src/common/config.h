@@ -3,8 +3,6 @@
 
 #include <Arduino.h>
 
-#define BLINKER_AUTH               "846631006679"
-
 #define BLINKER_KEY_SERVO          "key-servo"
 #define BLINKER_KEY_LIGHT          "key-light"
 #define BLINKER_BTN_PWR            "btn-pwr"
@@ -16,8 +14,24 @@
 #define BLINKER_SLIDER_TEMP        "ran-wen"
 #define BLINKER_NUMBER_TEMP        "settemp"
 
-#define WIFI_SSID                  "xxxx"
+/* WiFi配置 - 默认配置（首次使用或配网失败时） */
+#define WIFI_SSID                  "open-dog"
 #define WIFI_PASSWORD              "31415926"
+
+/* AP热点配置 */
+#define AP_SSID_PREFIX             "ESP_8266"
+#define AP_PASSWORD                ""              /* 空密码 = 开放热点 */
+
+/* WiFi配置持久化存储区 */
+#define EEPROM_WIFI_ADDR           400
+#define EEPROM_WIFI_MAGIC          0xEE
+#define EEPROM_WIFI_SSID_MAX       32
+#define EEPROM_WIFI_PASS_MAX       64
+
+/* Blinker密钥持久化存储区 */
+#define EEPROM_BLINKER_ADDR        600
+#define EEPROM_BLINKER_MAGIC       0xBB
+#define EEPROM_BLINKER_AUTH_MAX    32
 
 #define ONBOARD_LED_PIN            2
 #define LED_ACTIVE_LEVEL           0
@@ -38,6 +52,7 @@
 #define SERVO_HOLD_MS              3000
 
 #define IR_TX_PIN                  3
+#define MAX_SCAN_RESULTS           15
 
 #define AC_DEFAULT_MODE            1
 #define AC_DEFAULT_TEMP            26

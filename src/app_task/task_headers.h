@@ -16,6 +16,7 @@ typedef struct {
 
 void task_door_init(void);
 void task_door_run(void);
+bool task_door_is_opening(void);
 
 void task_led_init(void);
 void task_led_run(void);
@@ -26,6 +27,7 @@ void task_led_manual_toggle(void);
 
 void task_uart_init(void);
 void task_uart_run(void);
+uint32_t task_uart_get_heartbeat_count(void);
 
 void task_blinker_init(void);
 void task_blinker_run(void);
