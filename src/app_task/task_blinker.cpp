@@ -24,7 +24,8 @@ static void blinker_ac_pwr_handler(void)
 
 static void blinker_ac_fan_handler(void)
 {
-    LOG_I("点灯科技: 空调风速按钮按下");
+    LOG_I("点灯科技: 空调风速按钮按下，循环风速");
+    srv_blinker_ac_fan_cycle();
 }
 
 static void blinker_ac_cool_handler(void)

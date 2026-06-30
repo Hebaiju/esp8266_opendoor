@@ -39,6 +39,15 @@
 
 #define IR_TX_PIN                  3
 
+#define AC_DEFAULT_MODE            1
+#define AC_DEFAULT_TEMP            26
+#define AC_DEFAULT_FAN_LEVEL       4
+#define AC_SEND_DEBOUNCE_MS        500
+
+#define EEPROM_TOTAL_SIZE          1024
+#define EEPROM_AC_ADDR             500
+#define EEPROM_AC_MAGIC            0xAC
+
 #define NTP_SERVER                 "ntp.aliyun.com"
 #define NTP_TIMEZONE               8
 #define NTP_SYNC_INTERVAL_MS       3600000UL
