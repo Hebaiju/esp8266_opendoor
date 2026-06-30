@@ -4,9 +4,13 @@
 #include <IRsend.h>
 #include <ir_Coolix.h>
 
+/* IR发送器和空调协议对象 */
 static IRsend *s_irsend = NULL;
 static IRCoolixAC *s_ac = NULL;
 
+/**
+ * @brief 内部函数：将应用层模式转换为Coolix协议模式值
+ */
 static uint8_t mode_to_coolix(ac_mode_t mode)
 {
     switch (mode) {
@@ -19,6 +23,9 @@ static uint8_t mode_to_coolix(ac_mode_t mode)
     }
 }
 
+/**
+ * @brief 内部函数：将应用层风速等级转换为Coolix协议风速值
+ */
 static uint8_t fan_to_coolix(ac_fan_level_t fan)
 {
     switch (fan) {
@@ -31,6 +38,9 @@ static uint8_t fan_to_coolix(ac_fan_level_t fan)
     }
 }
 
+/**
+ * @brief 初始化红外驱动
+ */
 err_code_t drv_ir_init(void)
 {
     s_irsend = new IRsend(IR_TX_PIN);
@@ -45,6 +55,10 @@ err_code_t drv_ir_init(void)
     return APP_OK;
 }
 
+/**
+ * @brief 发送空调状态红外码
+ * 根据电源状态发送开/关机或完整状态码
+ */
 void drv_ir_send_state(bool power, ac_mode_t mode, uint8_t temp, ac_fan_level_t fan)
 {
     if (s_ac == NULL) {
