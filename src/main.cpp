@@ -3,8 +3,10 @@
 #include "common/log.h"
 #include "driver/drv_led.h"
 #include "driver/drv_servo.h"
+#include "driver/drv_ir.h"
 #include "service/srv_wifi.h"
 #include "service/srv_ntp.h"
+#include "service/srv_ir_ac.h"
 #include "app_task/task_headers.h"
 
 void setup()
@@ -34,6 +36,12 @@ void setup()
               SERVO_PIN, SERVO_MIN_ANGLE);
     }
 
+    if (srv_ir_ac_init() != APP_OK) {
+        LOG_E("空调红外服务初始化失败");
+    } else {
+        LOG_I("空调红外服务初始化完成");
+    }
+
     LOG_I("服务层初始化...");
     srv_wifi_init();
     srv_ntp_init();
@@ -52,6 +60,7 @@ void loop()
 {
     srv_wifi_run();
     srv_ntp_run();
+    srv_ir_ac_run();
     task_blinker_run();
     task_door_run();
     task_led_run();

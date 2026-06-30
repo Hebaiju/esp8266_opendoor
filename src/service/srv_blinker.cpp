@@ -2,6 +2,7 @@
 #include "srv_blinker.h"
 #include "../common/log.h"
 #include "../service/srv_wifi.h"
+#include "../service/srv_ir_ac.h"
 #include <Blinker.h>
 
 typedef enum {
@@ -30,14 +31,6 @@ static bool s_widgets_registered = false;
 // 应用状态（由外部设置，心跳回调同步到APP）
 static bool s_light_state = false;
 static bool s_door_opening = false;
-
-// 空调状态
-static bool s_ac_power = false;
-static bool s_ac_cool = false;
-static bool s_ac_dry = false;
-static bool s_ac_hot = false;
-static bool s_ac_auto = false;
-static int s_ac_temp = 26;
 
 static BlinkerButton *s_btn_servo = NULL;
 static BlinkerButton *s_btn_light = NULL;
@@ -70,8 +63,12 @@ static void update_app_state(void)
         Blinker.vibrate();
     }
 
+    bool ac_power = srv_ir_ac_get_power();
+    ac_mode_t ac_mode = srv_ir_ac_get_mode();
+    int ac_temp = srv_ir_ac_get_temp();
+
     if (s_btn_pwr != NULL) {
-        if (s_ac_power) {
+        if (ac_power) {
             s_btn_pwr->color("#00FF00");
             s_btn_pwr->text("已开机");
             s_btn_pwr->print("on");
@@ -83,23 +80,28 @@ static void update_app_state(void)
     }
 
     if (s_num_temp != NULL) {
-        s_num_temp->print(s_ac_temp);
+        s_num_temp->print(ac_temp);
     }
     if (s_slider_temp != NULL) {
-        s_slider_temp->print(s_ac_temp);
+        s_slider_temp->print(ac_temp);
     }
 
     const char *c = "#CCCCCC", *d = "#CCCCCC", *h = "#CCCCCC", *a = "#CCCCCC";
-    if (s_ac_power) {
-        if (s_ac_cool) c = "#00B0FF";
-        if (s_ac_dry)  d = "#FFC107";
-        if (s_ac_hot)  h = "#FF5722";
-        if (s_ac_auto) a = "#4CAF50";
+    if (ac_power) {
+        if (ac_mode == AC_MODE_COOL) c = "#00B0FF";
+        if (ac_mode == AC_MODE_DRY)  d = "#FFC107";
+        if (ac_mode == AC_MODE_HEAT) h = "#FF5722";
+        if (ac_mode == AC_MODE_AUTO) a = "#4CAF50";
     }
     if (s_btn_cool) { s_btn_cool->color(c); s_btn_cool->print(); }
     if (s_btn_dry)  { s_btn_dry->color(d);  s_btn_dry->print(); }
     if (s_btn_hot)  { s_btn_hot->color(h);  s_btn_hot->print(); }
     if (s_btn_auto) { s_btn_auto->color(a); s_btn_auto->print(); }
+
+    if (s_btn_fan) {
+        s_btn_fan->text(srv_ir_ac_get_fan_text());
+        s_btn_fan->print();
+    }
 }
 
 static void btn_servo_callback(const String & state)
@@ -125,13 +127,6 @@ static void btn_light_callback(const String & state)
 static void btn_ac_pwr_callback(const String & state)
 {
     LOG_I("点灯科技按钮 %s: %s", BLINKER_BTN_PWR, state.c_str());
-    if (state == BLINKER_CMD_ON) {
-        s_ac_power = true;
-    } else if (state == BLINKER_CMD_OFF) {
-        s_ac_power = false;
-    } else if (state == "tap" && s_ac_pwr_cb != NULL) {
-        s_ac_pwr_cb();
-    }
     if (s_ac_pwr_cb != NULL) {
         s_ac_pwr_cb();
     }
@@ -141,12 +136,10 @@ static void btn_ac_pwr_callback(const String & state)
 static void btn_ac_fan_callback(const String & state)
 {
     LOG_I("点灯科技按钮 %s: %s", BLINKER_BTN_FAN, state.c_str());
-    if (!s_ac_power) {
-        LOG_I("空调已关闭，忽略风速按钮");
-        return;
-    }
-    if ((state == "tap" || state == "on") && s_ac_fan_cb != NULL) {
-        s_ac_fan_cb();
+    if (state == "tap" || state == "on") {
+        if (s_ac_fan_cb != NULL) {
+            s_ac_fan_cb();
+        }
     }
     update_app_state();
 }
@@ -154,12 +147,10 @@ static void btn_ac_fan_callback(const String & state)
 static void btn_ac_cool_callback(const String & state)
 {
     LOG_I("点灯科技按钮 %s: %s", BLINKER_BTN_COOL, state.c_str());
-    if (!s_ac_power) {
-        LOG_I("空调已关闭，忽略制冷按钮");
-        return;
-    }
-    if ((state == "tap" || state == "on") && s_ac_cool_cb != NULL) {
-        s_ac_cool_cb();
+    if (state == "tap" || state == "on") {
+        if (s_ac_cool_cb != NULL) {
+            s_ac_cool_cb();
+        }
     }
     update_app_state();
 }
@@ -167,12 +158,10 @@ static void btn_ac_cool_callback(const String & state)
 static void btn_ac_dry_callback(const String & state)
 {
     LOG_I("点灯科技按钮 %s: %s", BLINKER_BTN_DRY, state.c_str());
-    if (!s_ac_power) {
-        LOG_I("空调已关闭，忽略除湿按钮");
-        return;
-    }
-    if ((state == "tap" || state == "on") && s_ac_dry_cb != NULL) {
-        s_ac_dry_cb();
+    if (state == "tap" || state == "on") {
+        if (s_ac_dry_cb != NULL) {
+            s_ac_dry_cb();
+        }
     }
     update_app_state();
 }
@@ -180,12 +169,10 @@ static void btn_ac_dry_callback(const String & state)
 static void btn_ac_hot_callback(const String & state)
 {
     LOG_I("点灯科技按钮 %s: %s", BLINKER_BTN_HOT, state.c_str());
-    if (!s_ac_power) {
-        LOG_I("空调已关闭，忽略制热按钮");
-        return;
-    }
-    if ((state == "tap" || state == "on") && s_ac_hot_cb != NULL) {
-        s_ac_hot_cb();
+    if (state == "tap" || state == "on") {
+        if (s_ac_hot_cb != NULL) {
+            s_ac_hot_cb();
+        }
     }
     update_app_state();
 }
@@ -193,12 +180,10 @@ static void btn_ac_hot_callback(const String & state)
 static void btn_ac_auto_callback(const String & state)
 {
     LOG_I("点灯科技按钮 %s: %s", BLINKER_BTN_AUTO, state.c_str());
-    if (!s_ac_power) {
-        LOG_I("空调已关闭，忽略自动按钮");
-        return;
-    }
-    if ((state == "tap" || state == "on") && s_ac_auto_cb != NULL) {
-        s_ac_auto_cb();
+    if (state == "tap" || state == "on") {
+        if (s_ac_auto_cb != NULL) {
+            s_ac_auto_cb();
+        }
     }
     update_app_state();
 }
@@ -206,10 +191,6 @@ static void btn_ac_auto_callback(const String & state)
 static void slider_temp_callback(int32_t value)
 {
     LOG_I("点灯科技滑块 %s: %d", BLINKER_SLIDER_TEMP, (int)value);
-    if (!s_ac_power) {
-        LOG_I("空调已关闭，忽略温度调节");
-        return;
-    }
     if (s_temp_slider_cb != NULL) {
         s_temp_slider_cb(value);
     }
@@ -408,70 +389,67 @@ void srv_blinker_notify_action(const char *action)
 
 void srv_blinker_set_ac_power(bool on)
 {
-    s_ac_power = on;
+    srv_ir_ac_set_power(on);
     update_app_state();
 }
 
 bool srv_blinker_get_ac_power(void)
 {
-    return s_ac_power;
+    return srv_ir_ac_get_power();
 }
 
 void srv_blinker_set_ac_temp(int temp)
 {
-    if (temp < 16) temp = 16;
-    if (temp > 30) temp = 30;
-    s_ac_temp = temp;
+    srv_ir_ac_set_temp(temp);
     update_app_state();
 }
 
 int srv_blinker_get_ac_temp(void)
 {
-    return s_ac_temp;
+    return srv_ir_ac_get_temp();
 }
 
 void srv_blinker_set_ac_mode_cool(void)
 {
-    s_ac_cool = true;
-    s_ac_dry = false;
-    s_ac_hot = false;
-    s_ac_auto = false;
+    srv_ir_ac_set_mode(AC_MODE_COOL);
     update_app_state();
 }
 
 void srv_blinker_set_ac_mode_dry(void)
 {
-    s_ac_cool = false;
-    s_ac_dry = true;
-    s_ac_hot = false;
-    s_ac_auto = false;
+    srv_ir_ac_set_mode(AC_MODE_DRY);
     update_app_state();
 }
 
 void srv_blinker_set_ac_mode_hot(void)
 {
-    s_ac_cool = false;
-    s_ac_dry = false;
-    s_ac_hot = true;
-    s_ac_auto = false;
+    srv_ir_ac_set_mode(AC_MODE_HEAT);
     update_app_state();
 }
 
 void srv_blinker_set_ac_mode_auto(void)
 {
-    s_ac_cool = false;
-    s_ac_dry = false;
-    s_ac_hot = false;
-    s_ac_auto = true;
+    srv_ir_ac_set_mode(AC_MODE_AUTO);
     update_app_state();
 }
 
-bool srv_blinker_is_ac_cool(void) { return s_ac_cool; }
-bool srv_blinker_is_ac_dry(void)  { return s_ac_dry; }
-bool srv_blinker_is_ac_hot(void)  { return s_ac_hot; }
-bool srv_blinker_is_ac_auto(void) { return s_ac_auto; }
+bool srv_blinker_is_ac_cool(void) { return srv_ir_ac_get_mode() == AC_MODE_COOL; }
+bool srv_blinker_is_ac_dry(void)  { return srv_ir_ac_get_mode() == AC_MODE_DRY; }
+bool srv_blinker_is_ac_hot(void)  { return srv_ir_ac_get_mode() == AC_MODE_HEAT; }
+bool srv_blinker_is_ac_auto(void) { return srv_ir_ac_get_mode() == AC_MODE_AUTO; }
 
 void srv_blinker_update_app_state(void)
 {
     update_app_state();
+}
+
+void srv_blinker_ac_fan_cycle(void)
+{
+    srv_ir_ac_cycle_fan();
+    update_app_state();
+}
+
+const char *srv_blinker_get_ac_fan_text(void)
+{
+    return srv_ir_ac_get_fan_text();
 }

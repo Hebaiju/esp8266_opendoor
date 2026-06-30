@@ -40,5 +40,7 @@ bool srv_blinker_is_ac_dry(void);
 bool srv_blinker_is_ac_hot(void);
 bool srv_blinker_is_ac_auto(void);
 void srv_blinker_update_app_state(void);
+void srv_blinker_ac_fan_cycle(void);
+const char *srv_blinker_get_ac_fan_text(void);
 
 #endif
