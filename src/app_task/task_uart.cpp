@@ -6,6 +6,7 @@
 #include "../service/srv_ntp.h"
 #include "../service/srv_blinker.h"
 #include "../service/srv_web.h"
+#include "../service/srv_mqtt.h"
 #include <ESP8266WiFi.h>
 #include <time.h>
 
@@ -33,7 +34,9 @@ static void uart_print_help(void)
     Serial.println();
     Serial.println("===== 串口命令列表 =====");
     Serial.println("  help           - 显示此帮助");
+    Serial.println("  status         - 显示系统状态");
     Serial.println("  wifi           - 显示WiFi状态");
+    Serial.println("  mqtt           - 显示MQTT状态");
     Serial.println("  time           - 显示当前时间(NTP)");
     Serial.println("  led on         - LED开启");
     Serial.println("  led off        - LED关闭");
@@ -43,8 +46,9 @@ static void uart_print_help(void)
     Serial.println("  led auto       - LED自动模式(时间控制)");
     Serial.println("  led toggle     - 手动切换灯光");
     Serial.println("  servo [n]      - 设置舵机角度(0-180)");
-    Serial.println("  status         - 显示系统状态");
     Serial.println("  open           - 触发开门");
+    Serial.println("  log info       - 设置日志级别为INFO(默认)");
+    Serial.println("  log debug      - 设置日志级别为DEBUG");
     Serial.println("=======================");
     Serial.println();
 }
@@ -87,6 +91,24 @@ static void uart_print_time(void)
     Serial.println();
 }
 
+static void uart_print_mqtt(void)
+{
+    Serial.println();
+    Serial.println("===== MQTT状态 =====");
+    Serial.printf("  服务器    : %s:%s\r\n",
+                  srv_mqtt_get_host(), srv_mqtt_get_port());
+    Serial.printf("  用户名    : %s\r\n",
+                  strlen(srv_mqtt_get_user()) > 0 ? srv_mqtt_get_user() : "(空)");
+    Serial.printf("  订阅主题  : %s\r\n", srv_mqtt_get_topic());
+    Serial.printf("  发布主题  : %s\r\n", srv_mqtt_get_pub_topic());
+    Serial.printf("  客户端ID  : %s\r\n",
+                  strlen(srv_mqtt_get_client_id()) > 0 ? srv_mqtt_get_client_id() : "(自动生成)");
+    Serial.printf("  连接状态  : %s\r\n",
+                  srv_mqtt_is_connected() ? "已连接" : "未连接");
+    Serial.println("===================");
+    Serial.println();
+}
+
 static void uart_print_status(void)
 {
     Serial.println();
@@ -105,6 +127,8 @@ static void uart_print_status(void)
                   srv_ntp_is_synced() ? "已同步" : "未同步");
     Serial.printf("  点灯科技  : %s\r\n",
                   srv_blinker_is_ready() ? "已就绪" : "连接中");
+    Serial.printf("  MQTT      : %s\r\n",
+                  srv_mqtt_is_connected() ? "已连接" : (srv_mqtt_has_config() ? "未连接" : "未配置"));
     Serial.println("===================");
     Serial.println();
 }
@@ -121,6 +145,8 @@ static void uart_handle_cmd(const char *cmd)
         uart_print_help();
     } else if (strcmp(cmd, "wifi") == 0) {
         uart_print_wifi();
+    } else if (strcmp(cmd, "mqtt") == 0) {
+        uart_print_mqtt();
     } else if (strcmp(cmd, "time") == 0) {
         uart_print_time();
     } else if (strcmp(cmd, "status") == 0) {
@@ -128,6 +154,17 @@ static void uart_handle_cmd(const char *cmd)
     } else if (strcmp(cmd, "open") == 0) {
         door_send_cmd(DOOR_CMD_OPEN);
         Serial.println("开门指令已发送");
+    } else if (strncmp(cmd, "log ", 4) == 0) {
+        const char *arg = cmd + 4;
+        if (strcmp(arg, "info") == 0) {
+            g_log_level = LOG_LEVEL_INFO;
+            Serial.println("日志级别: INFO");
+        } else if (strcmp(arg, "debug") == 0) {
+            g_log_level = LOG_LEVEL_DEBUG;
+            Serial.println("日志级别: DEBUG");
+        } else {
+            Serial.printf("未知日志级别: %s (info/debug)\r\n", arg);
+        }
     } else if (strncmp(cmd, "led ", 4) == 0) {
         const char *arg = cmd + 4;
         if (strcmp(arg, "on") == 0) {
@@ -217,9 +254,11 @@ void task_uart_run(void)
         const char *led_str = led_mode_str(task_led_get_mode());
         uint32_t web_req = srv_web_get_request_count();
 
-        LOG_I("心跳 #%u | WiFi:%s | NTP:%s | 点灯:%s | LED:%s | Web请求:%u",
+        LOG_D("心跳 #%u | WiFi:%s | NTP:%s | 点灯:%s | MQTT:%s | LED:%s | Web请求:%u",
               (unsigned)s_heartbeat_count,
-              wifi_str, ntp_str, blink_str, led_str, (unsigned)web_req);
+              wifi_str, ntp_str, blink_str,
+              srv_mqtt_is_connected() ? "已连接" : (srv_mqtt_has_config() ? "未连接" : "未配置"),
+              led_str, (unsigned)web_req);
     }
 }
 

@@ -8,7 +8,34 @@
 #include "service/srv_ntp.h"
 #include "service/srv_ir_ac.h"
 #include "service/srv_web.h"
+#include "service/srv_mqtt.h"
 #include "app_task/task_headers.h"
+
+log_level_t g_log_level = LOG_LEVEL_INFO;
+
+static void mqtt_msg_callback(const char *topic, const char *payload, int len)
+{
+    LOG_I("MQTT收到消息: topic=%s, payload=%.*s", topic, len, payload);
+
+    /* 开门指令 */
+    if (strstr(payload, MQTT_CMD_OPEN_1) != NULL) {
+        door_send_cmd(DOOR_CMD_OPEN);
+        LOG_I("MQTT开门指令已执行");
+        srv_mqtt_publish(srv_mqtt_get_pub_topic(), MQTT_REPLY_OPENED);
+    }
+
+    /* 灯光控制 - 反转灯光状态 */
+    if (strstr(payload, MQTT_CMD_LIGHT) != NULL) {
+        task_led_manual_toggle();
+        LOG_I("MQTT灯光切换已执行");
+        /* 根据当前灯光状态回复 */
+        if (drv_led_get_brightness() > 0) {
+            srv_mqtt_publish(srv_mqtt_get_pub_topic(), MQTT_REPLY_LIGHT_ON);
+        } else {
+            srv_mqtt_publish(srv_mqtt_get_pub_topic(), MQTT_REPLY_LIGHT_OFF);
+        }
+    }
+}
 
 void setup()
 {
@@ -46,7 +73,10 @@ void setup()
     LOG_I("服务层初始化...");
     srv_wifi_init();
     srv_ntp_init();
+    srv_mqtt_init();
     srv_web_init();
+
+    srv_mqtt_set_msg_callback(mqtt_msg_callback);
 
     LOG_I("任务层初始化...");
 
@@ -62,6 +92,7 @@ void loop()
 {
     srv_wifi_run();
     srv_ntp_run();
+    srv_mqtt_run();
     srv_ir_ac_run();
     srv_web_run();
     task_blinker_run();
