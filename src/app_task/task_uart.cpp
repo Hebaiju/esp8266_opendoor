@@ -5,6 +5,7 @@
 #include "../driver/drv_servo.h"
 #include "../service/srv_ntp.h"
 #include "../service/srv_blinker.h"
+#include "../service/srv_web.h"
 #include <ESP8266WiFi.h>
 #include <time.h>
 
@@ -206,7 +207,7 @@ void task_uart_run(void)
     uart_poll_input();
 
     uint32_t now = millis();
-    if (now - s_last_tick >= 5000) {
+    if (now - s_last_tick >= 10000) {
         s_last_tick = now;
         s_heartbeat_count++;
 
@@ -214,9 +215,15 @@ void task_uart_run(void)
         const char *ntp_str = srv_ntp_is_synced() ? "已同步" : "未同步";
         const char *blink_str = srv_blinker_is_ready() ? "已就绪" : "连接中";
         const char *led_str = led_mode_str(task_led_get_mode());
+        uint32_t web_req = srv_web_get_request_count();
 
-        LOG_I("心跳 #%lu | WiFi:%s | NTP:%s | 点灯:%s | LED:%s",
-              (unsigned long)s_heartbeat_count,
-              wifi_str, ntp_str, blink_str, led_str);
+        LOG_I("心跳 #%u | WiFi:%s | NTP:%s | 点灯:%s | LED:%s | Web请求:%u",
+              (unsigned)s_heartbeat_count,
+              wifi_str, ntp_str, blink_str, led_str, (unsigned)web_req);
     }
+}
+
+uint32_t task_uart_get_heartbeat_count(void)
+{
+    return s_heartbeat_count;
 }

@@ -125,4 +125,12 @@ const char *srv_blinker_get_ac_fan_text(void);
  */
 void srv_blinker_update_app_state(void);
 
+/* ========== Blinker配置持久化 ========== */
+
+bool srv_blinker_load_config(char *auth_buf, int buf_len);
+bool srv_blinker_save_config(const char *auth);
+bool srv_blinker_has_config(void);
+void srv_blinker_clear_config(void);
+const char *srv_blinker_get_auth(void);
+
 #endif
